@@ -12,6 +12,7 @@
  *******************************************************************************/
 package org.eclipse.kapua.service.liquibase;
 
+import liquibase.Contexts;
 import liquibase.Liquibase;
 import liquibase.database.Database;
 import liquibase.database.DatabaseFactory;
@@ -28,13 +29,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -63,7 +64,8 @@ public class KapuaLiquibaseClient {
     public void update() {
         try {
             if (Boolean.parseBoolean(System.getProperty("LIQUIBASE_ENABLED", "true")) || Boolean.parseBoolean(System.getenv("LIQUIBASE_ENABLED"))) {
-                LOG.info("Running Liquibase update with schema: " + schema.toString());
+                LOG.info("Running Liquibase update with schema: {}", schema);
+
                 try (Connection connection = DriverManager.getConnection(jdbcUrl, username, password)) {
                     loadResourcesStatic(connection, schema);
                 }
@@ -120,12 +122,12 @@ public class KapuaLiquibaseClient {
     }
 
     private static void executeMasters(Connection connection, Optional<String> schema, File changelogTempDirectory, String preMaster) throws LiquibaseException {
-        List<File> masterChangelogs = Arrays.asList(changelogTempDirectory.listFiles((FilenameFilter) (dir, name) -> name.endsWith(preMaster)));
+        List<File> masterChangelogs = Arrays.asList(changelogTempDirectory.listFiles((dir, name) -> name.endsWith(preMaster)));
 
         LOG.info("\tMaster Liquibase files found: {}", masterChangelogs.size());
 
         LOG.trace("\tSorting master Liquibase files found.");
-        masterChangelogs.sort((f1, f2) -> f1.getAbsolutePath().compareTo(f2.getAbsolutePath()));
+        masterChangelogs.sort(Comparator.comparing(File::getAbsolutePath));
 
         for (File masterChangelog : masterChangelogs) {
             LOG.info("\t\tExcuting liquibase script: {}", masterChangelog.getAbsolutePath());
@@ -134,9 +136,9 @@ public class KapuaLiquibaseClient {
                 database.setDefaultSchemaName(schema.get());
             }
             Liquibase liquibase = new Liquibase(masterChangelog.getAbsolutePath(), new FileSystemResourceAccessor(), database);
-            liquibase.update(null);
+            liquibase.update((Contexts) null);
 
-            LOG.debug("\t\tExcuted liquibase script: {}", masterChangelog.getAbsolutePath());
+            LOG.debug("\t\tExecuted liquibase script: {}", masterChangelog.getAbsolutePath());
         }
     }
 
